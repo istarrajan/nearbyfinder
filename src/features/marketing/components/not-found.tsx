@@ -1,4 +1,4 @@
-import { Link } from "react-router";
+import Link from 'next/link';
 import { MapPin, Home } from "lucide-react";
 
 export function NotFound() {
@@ -15,7 +15,7 @@ export function NotFound() {
         </div>
 
         <Link
-          to="/"
+          href="/"
           className="inline-flex items-center gap-2 bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition-colors font-medium"
         >
           <Home className="w-5 h-5" />

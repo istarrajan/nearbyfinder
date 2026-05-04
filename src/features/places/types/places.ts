@@ -98,7 +98,7 @@ export function parseOsmPlaceId(
   const m = /^osm-(n|w)-(\d+)$/.exec(id);
   if (!m) return null;
   const osmType: OsmRefType = m[1] === 'n' ? 'node' : 'way';
-  const osmId = Number(m[2], 10);
+  const osmId = Number.parseInt(m[2], 10);
   if (!Number.isFinite(osmId)) return null;
   return { osmType, osmId };
 }

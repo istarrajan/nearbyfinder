@@ -1,5 +1,8 @@
+'use client';
+
 import { useEffect, useState } from 'react';
-import { useParams, Link, useNavigate } from 'react-router';
+import Link from 'next/link';
+import { useParams, useRouter } from 'next/navigation';
 import {
   MapPin,
   Star,
@@ -11,21 +14,19 @@ import {
   Share2,
   Mail,
 } from 'lucide-react';
-import type { PlaceDetailItem } from '../../types/places';
-import { parseOsmPlaceId } from '../../types/places';
-import { fetchPlaceDetail } from '../../services/overpassPlaces';
-import {
-  FALLBACK_MAP_CENTER,
-  readLastUserLocation,
-} from '../../lib/geoStorage';
+import type { PlaceDetailItem } from '@/features/places/types/places';
+import { parseOsmPlaceId } from '@/features/places/types/places';
+import { fetchPlaceDetail } from '@/features/places/api/overpass-places';
+import { FALLBACK_MAP_CENTER, readLastUserLocation } from '@/lib/geo-storage';
 
 function formatMiles(mi: number): string {
   return (Math.round(mi * 10) / 10).toFixed(1);
 }
 
 export function PlaceDetail() {
-  const { id } = useParams();
-  const navigate = useNavigate();
+  const params = useParams();
+  const router = useRouter();
+  const id = typeof params?.id === 'string' ? params.id : Array.isArray(params?.id) ? params.id[0] : undefined;
   const [place, setPlace] = useState<PlaceDetailItem | null>(null);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
@@ -44,6 +45,7 @@ export function PlaceDetail() {
       return;
     }
 
+    const { osmType, osmId } = parsed;
     const ac = new AbortController();
 
     async function load() {
@@ -67,8 +69,8 @@ export function PlaceDetail() {
 
       try {
         const detail = await fetchPlaceDetail(
-          parsed.osmType,
-          parsed.osmId,
+          osmType,
+          osmId,
           user.lat,
           user.lng,
           ac.signal
@@ -80,9 +82,7 @@ export function PlaceDetail() {
         } else {
           setPlace(detail);
         }
-      } catch (e: unknown) {
-        if (e instanceof DOMException && e.name === 'AbortError') return;
-        if (e instanceof Error && e.name === 'AbortError') return;
+      } catch {
         setPlace(null);
         setNotFound(true);
       } finally {
@@ -113,7 +113,7 @@ export function PlaceDetail() {
           <p className="text-gray-600 mb-6 max-w-md">
             This link may be invalid, or the place is no longer in the map database.
           </p>
-          <Link to="/" className="text-blue-600 hover:text-blue-700">
+          <Link href="/" className="text-blue-600 hover:text-blue-700">
             Return to home
           </Link>
         </div>
@@ -140,7 +140,7 @@ export function PlaceDetail() {
 
         <button
           type="button"
-          onClick={() => navigate(-1)}
+          onClick={() => router.back()}
           className="absolute top-6 left-6 bg-white/90 backdrop-blur-sm p-3 rounded-lg hover:bg-white transition-all shadow-lg"
         >
           <ArrowLeft className="w-5 h-5 text-gray-900" />

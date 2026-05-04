@@ -1,12 +1,13 @@
-import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { Link } from 'react-router';
-import { MapPin, Search, Star, Phone, Clock } from 'lucide-react';
-import type { Category, PlaceListItem } from '../../types/places';
-import { fetchNearbyPlaces } from '../../services/overpassPlaces';
-import { searchAreaByQuery } from '../../services/photonGeocode';
-import { FALLBACK_MAP_CENTER, writeLastUserLocation } from '../../lib/geoStorage';
+'use client';
 
-/** Prevents getCurrentPosition from hanging with no callback (common without `timeout`). */
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import Link from 'next/link';
+import { MapPin, Search, Star, Phone, Clock } from 'lucide-react';
+import type { Category, PlaceListItem } from '@/features/places/types/places';
+import { fetchNearbyPlaces } from '@/features/places/api/overpass-places';
+import { searchAreaByQuery } from '@/features/places/api/photon-geocode';
+import { FALLBACK_MAP_CENTER, writeLastUserLocation } from '@/lib/geo-storage';
+
 const GEO_OPTIONS: PositionOptions = {
   enableHighAccuracy: false,
   timeout: 12_000,
@@ -31,7 +32,6 @@ export function PlaceFinder() {
   const [selectedCategory, setSelectedCategory] = useState<Category>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
-  /** Last successful GPS fix; used when switching back to “my location” */
   const [gpsLocation, setGpsLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [locationPermission, setLocationPermission] = useState<'pending' | 'granted' | 'denied'>('pending');
   const [areaLabel, setAreaLabel] = useState('Getting your location…');
@@ -320,7 +320,6 @@ export function PlaceFinder() {
                 className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-50"
               />
             </div>
-
           </div>
 
           <div className="flex items-center gap-2 mb-3">
@@ -340,6 +339,7 @@ export function PlaceFinder() {
             {CATEGORIES.map((category) => (
               <button
                 key={category.id}
+                type="button"
                 onClick={() => setSelectedCategory(category.id)}
                 disabled={awaitingLocation}
                 className={`px-4 py-2 rounded-full whitespace-nowrap transition-all ${
@@ -438,7 +438,7 @@ export function PlaceFinder() {
                   </p>
 
                   <Link
-                    to={`/place/${place.id}`}
+                    href={`/place/${place.id}`}
                     className="block w-full bg-blue-600 text-white py-2.5 rounded-lg hover:bg-blue-700 transition-colors font-medium text-center"
                   >
                     View Details

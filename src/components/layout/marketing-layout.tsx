@@ -1,13 +1,18 @@
-import { Outlet, Link } from "react-router";
-import { MapPin, Mail, Phone, Facebook, Twitter, Instagram } from "lucide-react";
+import type { ReactNode } from 'react';
+import Link from 'next/link';
+import { MapPin, Mail, Phone, Facebook, Twitter, Instagram } from 'lucide-react';
 
-export function Root() {
+type MarketingLayoutProps = {
+  children: ReactNode;
+};
+
+export function MarketingLayout({ children }: MarketingLayoutProps) {
   return (
     <div className="min-h-screen flex flex-col">
       <header className="bg-white shadow-md sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-4 py-4">
           <div className="flex items-center justify-between">
-            <Link to="/" className="flex items-center gap-3 hover:opacity-80 transition-opacity">
+            <Link href="/" className="flex items-center gap-3 hover:opacity-80 transition-opacity">
               <div className="bg-gradient-to-br from-blue-600 to-blue-700 p-2.5 rounded-xl shadow-lg">
                 <MapPin className="w-7 h-7 text-white" />
               </div>
@@ -18,15 +23,15 @@ export function Root() {
             </Link>
 
             <nav className="hidden md:flex items-center gap-6">
-              <Link to="/" className="text-gray-700 hover:text-blue-600 font-medium transition-colors">
+              <Link href="/" className="text-gray-700 hover:text-blue-600 font-medium transition-colors">
                 Home
               </Link>
-              <Link to="/contact" className="text-gray-700 hover:text-blue-600 font-medium transition-colors">
+              <Link href="/contact" className="text-gray-700 hover:text-blue-600 font-medium transition-colors">
                 Contact
               </Link>
             </nav>
 
-            <button className="md:hidden p-2 hover:bg-gray-100 rounded-lg">
+            <button type="button" className="md:hidden p-2 hover:bg-gray-100 rounded-lg" aria-label="Menu">
               <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
               </svg>
@@ -35,9 +40,7 @@ export function Root() {
         </div>
       </header>
 
-      <main className="flex-1">
-        <Outlet />
-      </main>
+      <main className="flex-1">{children}</main>
 
       <footer className="bg-gray-900 text-gray-300 mt-auto">
         <div className="max-w-7xl mx-auto px-4 py-10">
@@ -58,12 +61,12 @@ export function Root() {
               <h3 className="text-white font-semibold mb-4">Quick Links</h3>
               <ul className="space-y-2">
                 <li>
-                  <Link to="/" className="text-sm hover:text-blue-400 transition-colors">
+                  <Link href="/" className="text-sm hover:text-blue-400 transition-colors">
                     Home
                   </Link>
                 </li>
                 <li>
-                  <Link to="/contact" className="text-sm hover:text-blue-400 transition-colors">
+                  <Link href="/contact" className="text-sm hover:text-blue-400 transition-colors">
                     Contact Us
                   </Link>
                 </li>
@@ -74,12 +77,12 @@ export function Root() {
               <h3 className="text-white font-semibold mb-4">Legal</h3>
               <ul className="space-y-2">
                 <li>
-                  <Link to="/terms" className="text-sm hover:text-blue-400 transition-colors">
+                  <Link href="/terms" className="text-sm hover:text-blue-400 transition-colors">
                     Terms of Service
                   </Link>
                 </li>
                 <li>
-                  <Link to="/privacy" className="text-sm hover:text-blue-400 transition-colors">
+                  <Link href="/privacy" className="text-sm hover:text-blue-400 transition-colors">
                     Privacy Policy
                   </Link>
                 </li>
