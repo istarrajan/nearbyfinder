@@ -5,7 +5,9 @@ import {
   formatOsmPlaceId,
 } from '../types/places';
 
-const OVERPASS_URL = 'https://overpass-api.de/api/interpreter';
+/** Direct Overpass URL (server-side only; browsers use /api/overpass to avoid CORS). */
+const OVERPASS_DIRECT_URL =
+  process.env.OVERPASS_API_URL ?? 'https://overpass-api.de/api/interpreter';
 
 type OverpassElement = {
   type: 'node' | 'way' | 'relation';
@@ -208,13 +210,22 @@ async function overpassFetch(
   query: string,
   signal?: AbortSignal
 ): Promise<OverpassElement[]> {
-  const body = new URLSearchParams({ data: query });
-  const res = await fetch(OVERPASS_URL, {
-    method: 'POST',
-    body,
-    signal,
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-  });
+  const isBrowser = typeof window !== 'undefined';
+
+  const res = isBrowser
+    ? await fetch('/api/overpass', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query }),
+        signal,
+      })
+    : await fetch(OVERPASS_DIRECT_URL, {
+        method: 'POST',
+        body: new URLSearchParams({ data: query }),
+        signal,
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      });
+
   if (!res.ok) {
     throw new Error(`Overpass HTTP ${res.status}`);
   }
