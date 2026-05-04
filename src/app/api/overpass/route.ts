@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { overpassUpstreamHeaders } from '@/lib/overpass-upstream';
 
 const DEFAULT_OVERPASS = 'https://overpass-api.de/api/interpreter';
 const MAX_QUERY_CHARS = 200_000;
@@ -33,7 +34,7 @@ export async function POST(req: Request) {
     res = await fetch(upstream, {
       method: 'POST',
       body: form,
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      headers: overpassUpstreamHeaders(),
       cache: 'no-store',
       signal: AbortSignal.timeout(55_000),
     });

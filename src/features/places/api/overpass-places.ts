@@ -1,3 +1,4 @@
+import { overpassUpstreamHeaders } from '@/lib/overpass-upstream';
 import type { Category, OsmRefType, PlaceDetailItem, PlaceListItem } from '../types/places';
 import {
   categoryGalleryImages,
@@ -223,7 +224,7 @@ async function overpassFetch(
         method: 'POST',
         body: new URLSearchParams({ data: query }),
         signal,
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        headers: overpassUpstreamHeaders(),
       });
 
   if (!res.ok) {
