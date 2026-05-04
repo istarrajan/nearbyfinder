@@ -1,91 +1,118 @@
-import { useParams, Link, useNavigate } from "react-router";
-import { MapPin, Star, Phone, Clock, Navigation, ArrowLeft, Globe, Share2 } from "lucide-react";
+import { useEffect, useState } from 'react';
+import { useParams, Link, useNavigate } from 'react-router';
+import {
+  MapPin,
+  Star,
+  Phone,
+  Clock,
+  Navigation,
+  ArrowLeft,
+  Globe,
+  Share2,
+  Mail,
+} from 'lucide-react';
+import type { PlaceDetailItem } from '../../types/places';
+import { parseOsmPlaceId } from '../../types/places';
+import { fetchPlaceDetail } from '../../services/overpassPlaces';
+import {
+  FALLBACK_MAP_CENTER,
+  readLastUserLocation,
+} from '../../lib/geoStorage';
 
-const MOCK_PLACES = [
-  {
-    id: '1',
-    name: 'Grand Plaza Hotel',
-    category: 'hotels',
-    rating: 4.5,
-    reviews: 328,
-    distance: 0.5,
-    address: '123 Main Street, Downtown',
-    phone: '+1 234-567-8901',
-    email: 'info@grandplaza.com',
-    website: 'www.grandplazahotel.com',
-    isOpen: true,
-    hours: 'Open 24 hours',
-    description: 'Grand Plaza Hotel offers luxurious accommodations in the heart of downtown. With spacious rooms, world-class amenities, and exceptional service, we provide the perfect blend of comfort and elegance for business and leisure travelers.',
-    lat: 40.7128,
-    lng: -74.0060,
-    image: 'https://images.unsplash.com/photo-1566073771259-6a8506099945?w=800',
-    amenities: ['Free WiFi', 'Swimming Pool', 'Fitness Center', 'Restaurant', 'Room Service', 'Parking'],
-    images: [
-      'https://images.unsplash.com/photo-1566073771259-6a8506099945?w=800',
-      'https://images.unsplash.com/photo-1551882547-ff40c63fe5fa?w=800',
-      'https://images.unsplash.com/photo-1582719478250-c89cae4dc85b?w=800'
-    ]
-  },
-  {
-    id: '2',
-    name: 'The Italian Corner',
-    category: 'restaurants',
-    rating: 4.8,
-    reviews: 542,
-    distance: 0.3,
-    address: '456 Oak Avenue, City Center',
-    phone: '+1 234-567-8902',
-    email: 'reservations@italiancorner.com',
-    website: 'www.italiancorner.com',
-    isOpen: true,
-    hours: 'Mon-Sun: 11:00 AM - 10:00 PM',
-    description: 'Experience authentic Italian cuisine at The Italian Corner. Our chefs bring traditional recipes from Italy, using fresh ingredients and time-honored cooking techniques to create unforgettable dining experiences.',
-    lat: 40.7138,
-    lng: -74.0070,
-    image: 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=800',
-    amenities: ['Outdoor Seating', 'Wine Bar', 'Takeout', 'Delivery', 'Private Events', 'Valet Parking'],
-    images: [
-      'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=800',
-      'https://images.unsplash.com/photo-1552566626-52f8b828add9?w=800',
-      'https://images.unsplash.com/photo-1414235077428-338989a2e8c0?w=800'
-    ]
-  },
-  {
-    id: '3',
-    name: 'Luxe Hair Salon',
-    category: 'salons',
-    rating: 4.6,
-    reviews: 215,
-    distance: 0.7,
-    address: '789 Pine Road, Westside',
-    phone: '+1 234-567-8903',
-    email: 'appointments@luxesalon.com',
-    website: 'www.luxehairsalon.com',
-    isOpen: true,
-    hours: 'Tue-Sat: 9:00 AM - 7:00 PM, Sun: 10:00 AM - 5:00 PM',
-    description: 'Luxe Hair Salon is your destination for premium hair care and styling. Our experienced stylists stay current with the latest trends and techniques to help you look and feel your best.',
-    lat: 40.7118,
-    lng: -74.0050,
-    image: 'https://images.unsplash.com/photo-1560066984-138dadb4c35b?w=800',
-    amenities: ['Hair Styling', 'Coloring', 'Treatments', 'Manicure', 'Pedicure', 'Makeup'],
-    images: [
-      'https://images.unsplash.com/photo-1560066984-138dadb4c35b?w=800',
-      'https://images.unsplash.com/photo-1562322140-8baeececf3df?w=800',
-      'https://images.unsplash.com/photo-1521590832167-7bcbfaa6381f?w=800'
-    ]
-  }
-];
+function formatMiles(mi: number): string {
+  return (Math.round(mi * 10) / 10).toFixed(1);
+}
 
 export function PlaceDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const place = MOCK_PLACES.find(p => p.id === id);
+  const [place, setPlace] = useState<PlaceDetailItem | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [notFound, setNotFound] = useState(false);
 
-  if (!place) {
+  useEffect(() => {
+    if (!id) {
+      setNotFound(true);
+      setLoading(false);
+      return;
+    }
+
+    const parsed = parseOsmPlaceId(id);
+    if (!parsed) {
+      setNotFound(true);
+      setLoading(false);
+      return;
+    }
+
+    const ac = new AbortController();
+
+    async function load() {
+      setLoading(true);
+      setNotFound(false);
+
+      let user = readLastUserLocation();
+      if (!user && 'geolocation' in navigator) {
+        user = await new Promise<{ lat: number; lng: number }>((resolve) => {
+          navigator.geolocation.getCurrentPosition(
+            (p) =>
+              resolve({
+                lat: p.coords.latitude,
+                lng: p.coords.longitude,
+              }),
+            () => resolve(FALLBACK_MAP_CENTER)
+          );
+        });
+      }
+      if (!user) user = FALLBACK_MAP_CENTER;
+
+      try {
+        const detail = await fetchPlaceDetail(
+          parsed.osmType,
+          parsed.osmId,
+          user.lat,
+          user.lng,
+          ac.signal
+        );
+        if (ac.signal.aborted) return;
+        if (!detail) {
+          setPlace(null);
+          setNotFound(true);
+        } else {
+          setPlace(detail);
+        }
+      } catch (e: unknown) {
+        if (e instanceof DOMException && e.name === 'AbortError') return;
+        if (e instanceof Error && e.name === 'AbortError') return;
+        setPlace(null);
+        setNotFound(true);
+      } finally {
+        if (!ac.signal.aborted) setLoading(false);
+      }
+    }
+
+    void load();
+    return () => ac.abort();
+  }, [id]);
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
+        <div className="text-center">
+          <MapPin className="w-14 h-14 text-gray-300 mx-auto mb-4 animate-pulse" />
+          <p className="text-gray-600">Loading place from OpenStreetMap…</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (notFound || !place) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
           <h2 className="text-2xl font-bold text-gray-900 mb-4">Place not found</h2>
+          <p className="text-gray-600 mb-6 max-w-md">
+            This link may be invalid, or the place is no longer in the map database.
+          </p>
           <Link to="/" className="text-blue-600 hover:text-blue-700">
             Return to home
           </Link>
@@ -93,6 +120,13 @@ export function PlaceDetail() {
       </div>
     );
   }
+
+  const websiteHref =
+    place.website && place.website.trim()
+      ? `https://${place.website.replace(/^https?:\/\//i, '')}`
+      : null;
+
+  const osmRef = id ? parseOsmPlaceId(id) : null;
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -105,6 +139,7 @@ export function PlaceDetail() {
         <div className="absolute inset-0 bg-gradient-to-t from-gray-900/80 to-transparent" />
 
         <button
+          type="button"
           onClick={() => navigate(-1)}
           className="absolute top-6 left-6 bg-white/90 backdrop-blur-sm p-3 rounded-lg hover:bg-white transition-all shadow-lg"
         >
@@ -116,15 +151,21 @@ export function PlaceDetail() {
             <div className="flex items-start justify-between">
               <div>
                 <h1 className="text-4xl font-bold mb-2">{place.name}</h1>
-                <div className="flex items-center gap-4 text-sm">
-                  <div className="flex items-center gap-1">
-                    <Star className="w-5 h-5 fill-yellow-400 text-yellow-400" />
-                    <span className="font-semibold">{place.rating}</span>
-                    <span className="text-gray-300">({place.reviews} reviews)</span>
-                  </div>
+                <div className="flex items-center gap-4 text-sm flex-wrap">
+                  {place.rating != null ? (
+                    <div className="flex items-center gap-1">
+                      <Star className="w-5 h-5 fill-yellow-400 text-yellow-400" />
+                      <span className="font-semibold">{place.rating}</span>
+                      {place.reviews != null && (
+                        <span className="text-gray-300">({place.reviews} reviews)</span>
+                      )}
+                    </div>
+                  ) : (
+                    <span className="text-gray-300">Not rated · OpenStreetMap</span>
+                  )}
                   <div className="flex items-center gap-1">
                     <MapPin className="w-4 h-4" />
-                    <span>{place.distance} miles away</span>
+                    <span>{formatMiles(place.distance)} miles away</span>
                   </div>
                   {place.isOpen && (
                     <div className="flex items-center gap-1 bg-green-500/20 px-3 py-1 rounded-full">
@@ -135,7 +176,10 @@ export function PlaceDetail() {
                 </div>
               </div>
 
-              <button className="bg-white/90 backdrop-blur-sm p-3 rounded-lg hover:bg-white transition-all">
+              <button
+                type="button"
+                className="bg-white/90 backdrop-blur-sm p-3 rounded-lg hover:bg-white transition-all"
+              >
                 <Share2 className="w-5 h-5 text-gray-900" />
               </button>
             </div>
@@ -148,18 +192,18 @@ export function PlaceDetail() {
           <div className="lg:col-span-2 space-y-6">
             <div className="bg-white rounded-xl shadow-sm p-6">
               <h2 className="text-2xl font-bold text-gray-900 mb-4">About</h2>
-              <p className="text-gray-700 leading-relaxed">{place.description}</p>
+              <p className="text-gray-700 leading-relaxed whitespace-pre-line">{place.description}</p>
             </div>
 
             <div className="bg-white rounded-xl shadow-sm p-6">
-              <h2 className="text-2xl font-bold text-gray-900 mb-4">Amenities & Services</h2>
+              <h2 className="text-2xl font-bold text-gray-900 mb-4">Tags & services (OSM)</h2>
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                 {place.amenities.map((amenity, index) => (
                   <div
                     key={index}
                     className="flex items-center gap-2 text-gray-700 bg-gray-50 px-4 py-2 rounded-lg"
                   >
-                    <div className="w-2 h-2 bg-blue-600 rounded-full" />
+                    <div className="w-2 h-2 bg-blue-600 rounded-full flex-shrink-0" />
                     <span className="text-sm">{amenity}</span>
                   </div>
                 ))}
@@ -168,6 +212,9 @@ export function PlaceDetail() {
 
             <div className="bg-white rounded-xl shadow-sm p-6">
               <h2 className="text-2xl font-bold text-gray-900 mb-4">Gallery</h2>
+              <p className="text-sm text-gray-500 mb-4">
+                Stock images by category — OpenStreetMap does not provide venue photos here.
+              </p>
               <div className="grid grid-cols-3 gap-4">
                 {place.images.map((img, index) => (
                   <div key={index} className="aspect-video rounded-lg overflow-hidden">
@@ -199,19 +246,44 @@ export function PlaceDetail() {
                   <Phone className="w-5 h-5 text-blue-600 mt-0.5 flex-shrink-0" />
                   <div>
                     <p className="text-sm font-medium text-gray-900">Phone</p>
-                    <a href={`tel:${place.phone}`} className="text-sm text-blue-600 hover:underline">
-                      {place.phone}
-                    </a>
+                    {place.phone !== '—' ? (
+                      <a href={`tel:${place.phone}`} className="text-sm text-blue-600 hover:underline">
+                        {place.phone}
+                      </a>
+                    ) : (
+                      <p className="text-sm text-gray-500">Not listed on OpenStreetMap</p>
+                    )}
                   </div>
                 </div>
+
+                {place.email ? (
+                  <div className="flex items-start gap-3">
+                    <Mail className="w-5 h-5 text-blue-600 mt-0.5 flex-shrink-0" />
+                    <div>
+                      <p className="text-sm font-medium text-gray-900">Email</p>
+                      <a href={`mailto:${place.email}`} className="text-sm text-blue-600 hover:underline">
+                        {place.email}
+                      </a>
+                    </div>
+                  </div>
+                ) : null}
 
                 <div className="flex items-start gap-3">
                   <Globe className="w-5 h-5 text-blue-600 mt-0.5 flex-shrink-0" />
                   <div>
                     <p className="text-sm font-medium text-gray-900">Website</p>
-                    <a href={`https://${place.website}`} target="_blank" rel="noopener noreferrer" className="text-sm text-blue-600 hover:underline">
-                      {place.website}
-                    </a>
+                    {websiteHref ? (
+                      <a
+                        href={websiteHref}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-sm text-blue-600 hover:underline break-all"
+                      >
+                        {place.website}
+                      </a>
+                    ) : (
+                      <p className="text-sm text-gray-500">Not listed on OpenStreetMap</p>
+                    )}
                   </div>
                 </div>
 
@@ -225,13 +297,15 @@ export function PlaceDetail() {
               </div>
 
               <div className="mt-6 space-y-3">
-                <a
-                  href={`tel:${place.phone}`}
-                  className="w-full bg-blue-600 text-white py-3 rounded-lg hover:bg-blue-700 transition-colors font-medium flex items-center justify-center gap-2"
-                >
-                  <Phone className="w-5 h-5" />
-                  Call Now
-                </a>
+                {place.phone !== '—' ? (
+                  <a
+                    href={`tel:${place.phone}`}
+                    className="w-full bg-blue-600 text-white py-3 rounded-lg hover:bg-blue-700 transition-colors font-medium flex items-center justify-center gap-2"
+                  >
+                    <Phone className="w-5 h-5" />
+                    Call Now
+                  </a>
+                ) : null}
 
                 <a
                   href={`https://www.google.com/maps/dir/?api=1&destination=${place.lat},${place.lng}`}
@@ -242,6 +316,17 @@ export function PlaceDetail() {
                   <Navigation className="w-5 h-5" />
                   Get Directions
                 </a>
+
+                {osmRef ? (
+                  <a
+                    href={`https://www.openstreetmap.org/${osmRef.osmType}/${osmRef.osmId}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="w-full text-sm text-center text-blue-600 hover:underline block pt-1"
+                  >
+                    View on OpenStreetMap
+                  </a>
+                ) : null}
               </div>
             </div>
           </div>

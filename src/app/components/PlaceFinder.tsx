@@ -1,166 +1,17 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { Link } from 'react-router';
-import { MapPin, Search, Navigation, Star, Phone, Clock, ChevronDown } from 'lucide-react';
+import { MapPin, Search, Star, Phone, Clock } from 'lucide-react';
+import type { Category, PlaceListItem } from '../../types/places';
+import { fetchNearbyPlaces } from '../../services/overpassPlaces';
+import { searchAreaByQuery } from '../../services/photonGeocode';
+import { FALLBACK_MAP_CENTER, writeLastUserLocation } from '../../lib/geoStorage';
 
-type Category = 'all' | 'hotels' | 'restaurants' | 'salons' | 'cafes' | 'gyms' | 'pharmacies';
-
-interface Place {
-  id: string;
-  name: string;
-  category: Category;
-  rating: number;
-  reviews: number;
-  distance: number;
-  address: string;
-  phone: string;
-  isOpen: boolean;
-  lat: number;
-  lng: number;
-  image: string;
-}
-
-const MOCK_PLACES: Place[] = [
-  {
-    id: '1',
-    name: 'Grand Plaza Hotel',
-    category: 'hotels',
-    rating: 4.5,
-    reviews: 328,
-    distance: 0.5,
-    address: '123 Main Street, Downtown',
-    phone: '+1 234-567-8901',
-    isOpen: true,
-    lat: 40.7128,
-    lng: -74.0060,
-    image: 'https://images.unsplash.com/photo-1566073771259-6a8506099945?w=400'
-  },
-  {
-    id: '2',
-    name: 'The Italian Corner',
-    category: 'restaurants',
-    rating: 4.8,
-    reviews: 542,
-    distance: 0.3,
-    address: '456 Oak Avenue, City Center',
-    phone: '+1 234-567-8902',
-    isOpen: true,
-    lat: 40.7138,
-    lng: -74.0070,
-    image: 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=400'
-  },
-  {
-    id: '3',
-    name: 'Luxe Hair Salon',
-    category: 'salons',
-    rating: 4.6,
-    reviews: 215,
-    distance: 0.7,
-    address: '789 Pine Road, Westside',
-    phone: '+1 234-567-8903',
-    isOpen: true,
-    lat: 40.7118,
-    lng: -74.0050,
-    image: 'https://images.unsplash.com/photo-1560066984-138dadb4c035?w=400'
-  },
-  {
-    id: '4',
-    name: 'Sunrise Cafe',
-    category: 'cafes',
-    rating: 4.4,
-    reviews: 487,
-    distance: 0.2,
-    address: '321 Elm Street, Park District',
-    phone: '+1 234-567-8904',
-    isOpen: true,
-    lat: 40.7148,
-    lng: -74.0080,
-    image: 'https://images.unsplash.com/photo-1554118811-1e0d58224f24?w=400'
-  },
-  {
-    id: '5',
-    name: 'Comfort Inn & Suites',
-    category: 'hotels',
-    rating: 4.2,
-    reviews: 298,
-    distance: 1.2,
-    address: '654 Broadway, Theater District',
-    phone: '+1 234-567-8905',
-    isOpen: true,
-    lat: 40.7108,
-    lng: -74.0040,
-    image: 'https://images.unsplash.com/photo-1551882547-ff40c63fe5fa?w=400'
-  },
-  {
-    id: '6',
-    name: 'Sushi Paradise',
-    category: 'restaurants',
-    rating: 4.7,
-    reviews: 621,
-    distance: 0.9,
-    address: '987 Market Street, Financial District',
-    phone: '+1 234-567-8906',
-    isOpen: false,
-    lat: 40.7098,
-    lng: -74.0030,
-    image: 'https://images.unsplash.com/photo-1579584425555-c3ce17fd4351?w=400'
-  },
-  {
-    id: '7',
-    name: 'FitZone Gym',
-    category: 'gyms',
-    rating: 4.3,
-    reviews: 412,
-    distance: 0.6,
-    address: '147 Athletic Way, Sports Complex',
-    phone: '+1 234-567-8907',
-    isOpen: true,
-    lat: 40.7158,
-    lng: -74.0090,
-    image: 'https://images.unsplash.com/photo-1534438327276-14e5300c3a48?w=400'
-  },
-  {
-    id: '8',
-    name: 'Style Studio Salon',
-    category: 'salons',
-    rating: 4.9,
-    reviews: 156,
-    distance: 1.5,
-    address: '258 Fashion Boulevard, Uptown',
-    phone: '+1 234-567-8908',
-    isOpen: true,
-    lat: 40.7088,
-    lng: -74.0020,
-    image: 'https://images.unsplash.com/photo-1562322140-8baeececf3df?w=400'
-  },
-  {
-    id: '9',
-    name: 'HealthPlus Pharmacy',
-    category: 'pharmacies',
-    rating: 4.1,
-    reviews: 234,
-    distance: 0.4,
-    address: '369 Wellness Street, Medical Center',
-    phone: '+1 234-567-8909',
-    isOpen: true,
-    lat: 40.7168,
-    lng: -74.0100,
-    image: 'https://images.unsplash.com/photo-1576602976047-174e57a47881?w=400'
-  },
-  {
-    id: '10',
-    name: 'Moonlight Bistro',
-    category: 'restaurants',
-    rating: 4.6,
-    reviews: 389,
-    distance: 0.8,
-    address: '741 Gourmet Lane, Restaurant Row',
-    phone: '+1 234-567-8910',
-    isOpen: true,
-    lat: 40.7078,
-    lng: -74.0010,
-    image: 'https://images.unsplash.com/photo-1552566626-52f8b828add9?w=400'
-  }
-];
+/** Prevents getCurrentPosition from hanging with no callback (common without `timeout`). */
+const GEO_OPTIONS: PositionOptions = {
+  enableHighAccuracy: false,
+  timeout: 12_000,
+  maximumAge: 300_000,
+};
 
 const CATEGORIES = [
   { id: 'all' as Category, label: 'All', icon: '🏢' },
@@ -169,69 +20,293 @@ const CATEGORIES = [
   { id: 'cafes' as Category, label: 'Cafes', icon: '☕' },
   { id: 'salons' as Category, label: 'Salons', icon: '💇' },
   { id: 'gyms' as Category, label: 'Gyms', icon: '💪' },
-  { id: 'pharmacies' as Category, label: 'Pharmacies', icon: '💊' }
+  { id: 'pharmacies' as Category, label: 'Pharmacies', icon: '💊' },
 ];
+
+function formatMiles(mi: number): string {
+  return (Math.round(mi * 10) / 10).toFixed(1);
+}
 
 export function PlaceFinder() {
   const [selectedCategory, setSelectedCategory] = useState<Category>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
+  /** Last successful GPS fix; used when switching back to “my location” */
+  const [gpsLocation, setGpsLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [locationPermission, setLocationPermission] = useState<'pending' | 'granted' | 'denied'>('pending');
+  const [areaLabel, setAreaLabel] = useState('Getting your location…');
+  const [locationPanelOpen, setLocationPanelOpen] = useState(false);
+  const [areaSearchInput, setAreaSearchInput] = useState('');
+  const [areaSearchLoading, setAreaSearchLoading] = useState(false);
+  const [areaSearchError, setAreaSearchError] = useState<string | null>(null);
+  const [areaSearchResults, setAreaSearchResults] = useState<
+    { lat: number; lng: number; label: string }[]
+  >([]);
   const [sortBy, setSortBy] = useState<'distance' | 'rating'>('distance');
+  const [places, setPlaces] = useState<PlaceListItem[]>([]);
+  const [placesLoading, setPlacesLoading] = useState(false);
+  const [placesError, setPlacesError] = useState<string | null>(null);
+  const [refetchIndex, setRefetchIndex] = useState(0);
+  const areaSearchAbortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
-    if ('geolocation' in navigator) {
-      navigator.geolocation.getCurrentPosition(
-        (position) => {
-          setUserLocation({
-            lat: position.coords.latitude,
-            lng: position.coords.longitude
-          });
-          setLocationPermission('granted');
-        },
-        () => {
-          setLocationPermission('denied');
-          setUserLocation({ lat: 40.7128, lng: -74.0060 });
-        }
-      );
-    } else {
-      setUserLocation({ lat: 40.7128, lng: -74.0060 });
-    }
+    return () => areaSearchAbortRef.current?.abort();
   }, []);
 
-  const filteredPlaces = MOCK_PLACES
-    .filter(place => selectedCategory === 'all' || place.category === selectedCategory)
-    .filter(place =>
-      place.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      place.address.toLowerCase().includes(searchQuery.toLowerCase())
-    )
-    .sort((a, b) => {
-      if (sortBy === 'distance') return a.distance - b.distance;
-      return b.rating - a.rating;
-    });
+  const applyGpsSuccess = useCallback((lat: number, lng: number) => {
+    setGpsLocation({ lat, lng });
+    setUserLocation({ lat, lng });
+    setLocationPermission('granted');
+    setAreaLabel('Your current location');
+  }, []);
+
+  const applyGpsDenied = useCallback(() => {
+    setGpsLocation(null);
+    setUserLocation(FALLBACK_MAP_CENTER);
+    setLocationPermission('denied');
+    setAreaLabel('New York area (default — location denied or unavailable)');
+  }, []);
+
+  useEffect(() => {
+    if (!('geolocation' in navigator)) {
+      applyGpsDenied();
+      return;
+    }
+
+    let cancelled = false;
+    const safetyTimer = window.setTimeout(() => {
+      if (cancelled) return;
+      applyGpsDenied();
+      setAreaLabel(
+        'Default area (location timed out — allow location or use “Change area” to pick a city)'
+      );
+    }, 14_000);
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        if (cancelled) return;
+        window.clearTimeout(safetyTimer);
+        applyGpsSuccess(position.coords.latitude, position.coords.longitude);
+      },
+      () => {
+        if (cancelled) return;
+        window.clearTimeout(safetyTimer);
+        applyGpsDenied();
+      },
+      GEO_OPTIONS
+    );
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(safetyTimer);
+    };
+  }, [applyGpsDenied, applyGpsSuccess]);
+
+  useEffect(() => {
+    if (!userLocation) return;
+    writeLastUserLocation(userLocation);
+  }, [userLocation]);
+
+  useEffect(() => {
+    if (!userLocation) return;
+    const ac = new AbortController();
+    setPlacesLoading(true);
+    setPlacesError(null);
+    fetchNearbyPlaces(userLocation.lat, userLocation.lng, { signal: ac.signal })
+      .then(setPlaces)
+      .catch((err: unknown) => {
+        if (err instanceof DOMException && err.name === 'AbortError') return;
+        setPlacesError(
+          'Could not load places. The OpenStreetMap Overpass service may be busy — try again in a moment.'
+        );
+        setPlaces([]);
+      })
+      .finally(() => {
+        if (!ac.signal.aborted) setPlacesLoading(false);
+      });
+    return () => ac.abort();
+  }, [userLocation?.lat, userLocation?.lng, refetchIndex]);
+
+  const filteredPlaces = useMemo(() => {
+    return places
+      .filter((place) => selectedCategory === 'all' || place.category === selectedCategory)
+      .filter(
+        (place) =>
+          place.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          place.address.toLowerCase().includes(searchQuery.toLowerCase())
+      )
+      .sort((a, b) => {
+        if (sortBy === 'distance') return a.distance - b.distance;
+        const ar = a.rating ?? -1;
+        const br = b.rating ?? -1;
+        return br - ar;
+      });
+  }, [places, selectedCategory, searchQuery, sortBy]);
 
   const requestLocation = () => {
     if ('geolocation' in navigator) {
       navigator.geolocation.getCurrentPosition(
         (position) => {
-          setUserLocation({
-            lat: position.coords.latitude,
-            lng: position.coords.longitude
-          });
-          setLocationPermission('granted');
+          applyGpsSuccess(position.coords.latitude, position.coords.longitude);
         },
         () => {
           setLocationPermission('denied');
-        }
+        },
+        GEO_OPTIONS
       );
     }
   };
+
+  const useMyLocation = () => {
+    if (gpsLocation) {
+      setUserLocation(gpsLocation);
+      setAreaLabel('Your current location');
+      setLocationPanelOpen(false);
+      return;
+    }
+    requestLocation();
+  };
+
+  const pickManualArea = (hit: { lat: number; lng: number; label: string }) => {
+    setUserLocation({ lat: hit.lat, lng: hit.lng });
+    setAreaLabel(hit.label);
+    setLocationPanelOpen(false);
+    setAreaSearchInput('');
+    setAreaSearchResults([]);
+    setAreaSearchError(null);
+  };
+
+  const runAreaSearch = () => {
+    const q = areaSearchInput.trim();
+    if (!q) {
+      setAreaSearchResults([]);
+      setAreaSearchError('Enter a city, neighborhood, or address.');
+      return;
+    }
+    areaSearchAbortRef.current?.abort();
+    const ac = new AbortController();
+    areaSearchAbortRef.current = ac;
+    setAreaSearchLoading(true);
+    setAreaSearchError(null);
+    searchAreaByQuery(q, ac.signal)
+      .then((hits) => {
+        if (ac.signal.aborted) return;
+        setAreaSearchResults(hits);
+        if (!hits.length) setAreaSearchError('No matches — try a different search.');
+      })
+      .catch((err: unknown) => {
+        if (err instanceof DOMException && err.name === 'AbortError') return;
+        if (err instanceof Error && err.name === 'AbortError') return;
+        if (ac.signal.aborted) return;
+        setAreaSearchError('Search failed. Try again in a moment.');
+        setAreaSearchResults([]);
+      })
+      .finally(() => {
+        if (!ac.signal.aborted) setAreaSearchLoading(false);
+      });
+  };
+
+  const awaitingLocation = !userLocation;
 
   return (
     <div className="bg-gray-50">
       <div className="bg-white shadow-sm border-b sticky top-0 z-10">
         <div className="max-w-7xl mx-auto px-4 py-4">
-          <h2 className="text-xl font-semibold text-gray-900 mb-4">Find Places Near You</h2>
+          <h2 className="text-xl font-semibold text-gray-900 mb-3">Find Places Near You</h2>
+
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between mb-4 pb-4 border-b border-gray-100">
+            <div className="flex items-start gap-2 text-sm text-gray-600 min-w-0">
+              <MapPin className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
+              <div className="min-w-0">
+                <p>
+                  <span className="font-medium text-gray-800">Searching near: </span>
+                  <span className="text-gray-700">{areaLabel}</span>
+                </p>
+                {locationPermission === 'denied' && !gpsLocation && (
+                  <p className="text-xs text-gray-500 mt-1">
+                    Location access is off — search for an area or allow location so “Use my location” can work.
+                  </p>
+                )}
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-2 shrink-0">
+              <button
+                type="button"
+                onClick={() => {
+                  setLocationPanelOpen((o) => !o);
+                  setAreaSearchError(null);
+                }}
+                className="px-3 py-2 text-sm font-medium rounded-lg border border-gray-300 bg-white text-gray-800 hover:bg-gray-50"
+              >
+                {locationPanelOpen ? 'Close' : 'Change area'}
+              </button>
+              <button
+                type="button"
+                onClick={useMyLocation}
+                className="px-3 py-2 text-sm font-medium rounded-lg border border-blue-200 bg-blue-50 text-blue-800 hover:bg-blue-100"
+              >
+                Use my location
+              </button>
+            </div>
+          </div>
+
+          {locationPanelOpen && (
+            <div className="mb-4 p-4 rounded-xl border border-gray-200 bg-gray-50/80">
+              <p className="text-sm text-gray-600 mb-3">
+                Search for a city, neighborhood, or place name. Area suggestions use{' '}
+                <a
+                  href="https://photon.komoot.io/"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-blue-600 hover:underline"
+                >
+                  Photon
+                </a>{' '}
+                (OpenStreetMap-based geocoding). Nearby listings use the{' '}
+                <span className="font-medium">Overpass API</span> only.
+              </p>
+              <div className="flex flex-col sm:flex-row gap-2 mb-3">
+                <input
+                  type="text"
+                  value={areaSearchInput}
+                  onChange={(e) => setAreaSearchInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') runAreaSearch();
+                  }}
+                  placeholder="e.g. Shibuya, Tokyo or Austin TX"
+                  className="flex-1 px-3 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                />
+                <button
+                  type="button"
+                  onClick={runAreaSearch}
+                  disabled={areaSearchLoading}
+                  className="px-4 py-2.5 bg-gray-900 text-white text-sm font-medium rounded-lg hover:bg-gray-800 disabled:opacity-60"
+                >
+                  {areaSearchLoading ? 'Searching…' : 'Search area'}
+                </button>
+              </div>
+              {areaSearchError && (
+                <p className="text-sm text-amber-800 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2 mb-2">
+                  {areaSearchError}
+                </p>
+              )}
+              {areaSearchResults.length > 0 && (
+                <ul className="max-h-56 overflow-y-auto rounded-lg border border-gray-200 bg-white divide-y divide-gray-100">
+                  {areaSearchResults.map((hit, i) => (
+                    <li key={`${hit.lat}-${hit.lng}-${i}`}>
+                      <button
+                        type="button"
+                        onClick={() => pickManualArea(hit)}
+                        className="w-full text-left px-3 py-2.5 text-sm text-gray-800 hover:bg-blue-50"
+                      >
+                        {hit.label}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
 
           <div className="flex flex-col sm:flex-row gap-3 mb-4">
             <div className="flex-1 relative">
@@ -241,19 +316,11 @@ export function PlaceFinder() {
                 placeholder="Search places..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                disabled={awaitingLocation || placesLoading}
+                className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-50"
               />
             </div>
 
-            {locationPermission === 'denied' && (
-              <button
-                onClick={requestLocation}
-                className="px-4 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2 whitespace-nowrap"
-              >
-                <Navigation className="w-5 h-5" />
-                Enable Location
-              </button>
-            )}
           </div>
 
           <div className="flex items-center gap-2 mb-3">
@@ -261,10 +328,11 @@ export function PlaceFinder() {
             <select
               value={sortBy}
               onChange={(e) => setSortBy(e.target.value as 'distance' | 'rating')}
+              disabled={awaitingLocation}
               className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
               <option value="distance">Distance</option>
-              <option value="rating">Rating</option>
+              <option value="rating">Rating (OSM has no ratings; unrated sort last)</option>
             </select>
           </div>
 
@@ -273,6 +341,7 @@ export function PlaceFinder() {
               <button
                 key={category.id}
                 onClick={() => setSelectedCategory(category.id)}
+                disabled={awaitingLocation}
                 className={`px-4 py-2 rounded-full whitespace-nowrap transition-all ${
                   selectedCategory === category.id
                     ? 'bg-blue-600 text-white shadow-md'
@@ -288,11 +357,32 @@ export function PlaceFinder() {
       </div>
 
       <div className="max-w-7xl mx-auto px-4 py-6">
-        {filteredPlaces.length === 0 ? (
+        {awaitingLocation || placesLoading ? (
+          <div className="text-center py-16">
+            <MapPin className="w-16 h-16 text-gray-300 mx-auto mb-4 animate-pulse" />
+            <h3 className="text-xl font-semibold text-gray-900 mb-2">
+              {awaitingLocation ? 'Getting your location…' : 'Loading nearby places…'}
+            </h3>
+            <p className="text-gray-500">Live data from OpenStreetMap (Overpass API)</p>
+          </div>
+        ) : placesError ? (
+          <div className="text-center py-16 max-w-lg mx-auto">
+            <MapPin className="w-16 h-16 text-amber-400 mx-auto mb-4" />
+            <h3 className="text-xl font-semibold text-gray-900 mb-2">Could not load places</h3>
+            <p className="text-gray-600 mb-4">{placesError}</p>
+            <button
+              type="button"
+              onClick={() => setRefetchIndex((n) => n + 1)}
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+            >
+              Retry
+            </button>
+          </div>
+        ) : filteredPlaces.length === 0 ? (
           <div className="text-center py-16">
             <MapPin className="w-16 h-16 text-gray-300 mx-auto mb-4" />
             <h3 className="text-xl font-semibold text-gray-900 mb-2">No places found</h3>
-            <p className="text-gray-500">Try adjusting your search or category filter</p>
+            <p className="text-gray-500">Try another category or widen your search terms</p>
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
@@ -302,14 +392,10 @@ export function PlaceFinder() {
                 className="bg-white rounded-xl shadow-sm hover:shadow-md transition-shadow overflow-hidden border border-gray-100"
               >
                 <div className="relative h-48">
-                  <img
-                    src={place.image}
-                    alt={place.name}
-                    className="w-full h-full object-cover"
-                  />
+                  <img src={place.image} alt={place.name} className="w-full h-full object-cover" />
                   <div className="absolute top-3 right-3 bg-white px-2.5 py-1 rounded-full text-sm font-semibold flex items-center gap-1">
                     <MapPin className="w-4 h-4 text-blue-600" />
-                    {place.distance} mi
+                    {formatMiles(place.distance)} mi
                   </div>
                   {!place.isOpen && (
                     <div className="absolute top-3 left-3 bg-red-500 text-white px-3 py-1 rounded-full text-sm font-semibold">
@@ -321,12 +407,18 @@ export function PlaceFinder() {
                 <div className="p-4">
                   <h3 className="font-bold text-lg text-gray-900 mb-1">{place.name}</h3>
 
-                  <div className="flex items-center gap-2 mb-3">
-                    <div className="flex items-center gap-1">
-                      <Star className="w-4 h-4 fill-yellow-400 text-yellow-400" />
-                      <span className="font-semibold text-gray-900">{place.rating}</span>
-                    </div>
-                    <span className="text-sm text-gray-500">({place.reviews} reviews)</span>
+                  <div className="flex items-center gap-2 mb-3 flex-wrap">
+                    {place.rating != null ? (
+                      <div className="flex items-center gap-1">
+                        <Star className="w-4 h-4 fill-yellow-400 text-yellow-400" />
+                        <span className="font-semibold text-gray-900">{place.rating}</span>
+                      </div>
+                    ) : (
+                      <span className="text-sm text-gray-500">Not rated (OSM)</span>
+                    )}
+                    {place.reviews != null && (
+                      <span className="text-sm text-gray-500">({place.reviews} reviews)</span>
+                    )}
                     {place.isOpen && (
                       <div className="ml-auto flex items-center gap-1 text-green-600 text-sm">
                         <Clock className="w-4 h-4" />
@@ -342,7 +434,7 @@ export function PlaceFinder() {
 
                   <p className="text-sm text-gray-600 mb-4 flex items-center gap-2">
                     <Phone className="w-4 h-4 text-gray-400" />
-                    {place.phone}
+                    {place.phone === '—' ? <span className="text-gray-400">No phone listed</span> : place.phone}
                   </p>
 
                   <Link
@@ -357,17 +449,27 @@ export function PlaceFinder() {
           </div>
         )}
 
-        <div className="mt-8 p-4 bg-blue-50 rounded-lg border border-blue-100">
-          <p className="text-sm text-blue-900">
-            <strong>Note:</strong> This demo uses mock data. To integrate real data, you can use APIs like:
-            <br />
-            • Google Places API (via Supabase Edge Functions for secure API key handling)
-            <br />
-            • Foursquare Places API
-            <br />
-            • Yelp Fusion API
-            <br />
-            • OpenStreetMap with Overpass API
+        <div className="mt-8 p-4 bg-emerald-50 rounded-lg border border-emerald-100">
+          <p className="text-sm text-emerald-950">
+            <strong>Live data:</strong> Places come from{' '}
+            <a
+              className="text-emerald-800 underline font-medium"
+              href="https://www.openstreetmap.org/copyright"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              OpenStreetMap
+            </a>{' '}
+            via the{' '}
+            <a
+              className="text-emerald-800 underline font-medium"
+              href="https://wiki.openstreetmap.org/wiki/Overpass_API"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              Overpass API
+            </a>
+            . No API key is required. Coverage depends on local mappers; images are stock photos by category.
           </p>
         </div>
       </div>
